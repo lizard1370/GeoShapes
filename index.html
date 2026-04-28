@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoShapes - Learn Geometry</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <svg class="logo-g" viewBox="0 0 50 50">
+                <path d="M 25 10 A 15 15 0 1 0 25 40 L 25 35 A 10 10 0 1 1 25 15 L 25 20 L 35 20 L 35 30" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+            <svg class="logo-s" viewBox="0 0 50 50">
+                <path d="M 30 15 C 30 10 20 10 20 15 C 20 25 40 20 40 30 C 40 40 20 40 20 35" fill="none" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <h1 class="title">GeoShapes</h1>
+    </header>
+
+    <div class="toolbar">
+        <div class="tool-group">
+            <span class="tool-label">Shapes</span>
+            <button class="btn" data-shape="triangle" title="Triangle">
+                <svg viewBox="0 0 24 24"><polygon points="12,4 20,20 4,20" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+            <button class="btn" data-shape="square" title="Square">
+                <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+            <button class="btn" data-shape="circle" title="Circle">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+        </div>
+
+        <div class="tool-group">
+            <span class="tool-label">Transform</span>
+            <button class="btn" id="rotateBtn" title="Rotate 90°">
+                <svg viewBox="0 0 24 24"><path d="M 12 4 A 8 8 0 0 1 20 12 L 17 12 L 20 16 L 23 12 L 20 12 A 11 11 0 1 0 12 23" fill="none" stroke="currentColor" stroke-width="2" fill="currentColor"/></svg>
+            </button>
+            <button class="btn" id="flipBtn" title="Flip Horizontal">
+                <svg viewBox="0 0 24 24"><path d="M 4 4 L 20 4 L 20 20 L 4 20 Z M 12 4 L 12 20" fill="none" stroke="currentColor" stroke-width="2"/><path d="M 8 8 L 8 16 L 10 16 L 10 8 Z" fill="currentColor"/></svg>
+            </button>
+            <button class="btn" id="flipVertBtn" title="Flip Vertical">
+                <svg viewBox="0 0 24 24"><path d="M 4 4 L 20 4 L 20 20 L 4 20 Z M 4 12 L 20 12" fill="none" stroke="currentColor" stroke-width="2"/><path d="M 8 14 L 16 14 L 16 16 L 8 16 Z" fill="currentColor"/></svg>
+            </button>
+        </div>
+
+        <div class="tool-group">
+            <span class="tool-label">Actions</span>
+            <button class="btn btn-danger" id="deleteBtn" title="Delete Selected">
+                <svg viewBox="0 0 24 24"><path d="M 4 4 L 20 20 M 20 4 L 4 20" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+            <button class="btn" id="clearBtn" title="Clear All">Clear All</button>
+        </div>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="gridCanvas"></canvas>
+        <canvas id="shapesCanvas"></canvas>
+    </div>
+
+    <div class="info-panel" id="infoPanel">
+        <div class="info-row">
+            <span class="info-label">Selected:</span>
+            <span class="info-value" id="selectedInfo">None</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Points:</span>
+            <span class="info-value" id="pointsInfo">0</span>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
