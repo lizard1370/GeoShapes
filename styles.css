@@ -43,11 +43,12 @@ body {
     box-shadow: 0 1px 3px var(--shadow);
 }
 
-.logo {
-    display: flex;
+.Logo-L {
     align-items: center;
     gap: 8px;
-    margin-right: 16px;
+    color: var(--primary);
+    font: bolder 1.8rem 'Segoe UI', sans-serif;
+    margin-right: -0.025px;
 }
 
 .logo-g, .logo-s {
@@ -56,8 +57,8 @@ body {
 }
 
 .title {
-    font-size: 1.5rem;
-    font-weight: 600;
+    font-size: 1.1rem 'Segoe UI', sans-serif;
+    font-weight: bold;
     color: var(--text);
     letter-spacing: -0.025em;
 }

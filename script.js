@@ -1,6 +1,7 @@
+// ...existing code...
 const GRID_SIZE = 20;
 const SNAP_THRESHOLD = 10;
-const POINT_RADIUS = 6;
+const POINT_RADIUS = 6; // screen pixels for handles
 
 const gridCanvas = document.getElementById('gridCanvas');
 const shapesCanvas = document.getElementById('shapesCanvas');
@@ -15,6 +16,11 @@ const coordInput = document.getElementById('coordInput');
 const createBtn = document.getElementById('createBtn');
 const showAxesToggle = document.getElementById('showAxesToggle');
 
+let isPanning = false;
+let panStartX = 0;
+let panStartY = 0;
+let panStartOffsetX = 0;
+let panStartOffsetY = 0;
 let shapes = [];
 let selectedShape = null;
 let currentShapeType = null;
@@ -26,68 +32,114 @@ let dragOffset = { x: 0, y: 0 };
 let hoveredPoint = null;
 let showAxesNumbers = false;
 
+// world transform state
+let scale = 1;
+let offsetX = 0;
+let offsetY = 0;
+
+function screenToWorld(screenX, screenY) {
+    return {
+        x: (screenX - offsetX) / scale,
+        y: (screenY - offsetY) / scale
+    };
+}
+
+function worldToScreen(worldX, worldY) {
+    return {
+        x: worldX * scale + offsetX,
+        y: worldY * scale + offsetY
+    };
+}
+
 function resizeCanvases() {
     gridCanvas.width = window.innerWidth;
     gridCanvas.height = window.innerHeight;
     shapesCanvas.width = window.innerWidth;
     shapesCanvas.height = window.innerHeight;
+    // keep view centered on resize roughly (optional)
     drawGrid();
     drawAllShapes();
 }
 
 function drawGrid() {
-    gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+    // draw grid in world coordinates using transform
+    gridCtx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+    gridCtx.clearRect(-offsetX/scale, -offsetY/scale, gridCanvas.width/scale, gridCanvas.height/scale);
+
     gridCtx.strokeStyle = '#e2e8f0';
-    gridCtx.lineWidth = 1;
+    gridCtx.lineWidth = 1 / Math.max(scale, 0.0001);
 
-    for (let x = 0; x <= gridCanvas.width; x += GRID_SIZE) {
+    // compute visible world bounds
+    const worldXMin = -offsetX / scale;
+    const worldYMin = -offsetY / scale;
+    const worldXMax = (gridCanvas.width - offsetX) / scale;
+    const worldYMax = (gridCanvas.height - offsetY) / scale;
+
+    // vertical lines
+    let startX = Math.floor(worldXMin / GRID_SIZE) * GRID_SIZE;
+    for (let x = startX; x <= worldXMax; x += GRID_SIZE) {
         gridCtx.beginPath();
-        gridCtx.moveTo(x, 0);
-        gridCtx.lineTo(x, gridCanvas.height);
+        gridCtx.moveTo(x, worldYMin);
+        gridCtx.lineTo(x, worldYMax);
         gridCtx.stroke();
     }
 
-    for (let y = 0; y <= gridCanvas.height; y += GRID_SIZE) {
+    // horizontal lines
+    let startY = Math.floor(worldYMin / GRID_SIZE) * GRID_SIZE;
+    for (let y = startY; y <= worldYMax; y += GRID_SIZE) {
         gridCtx.beginPath();
-        gridCtx.moveTo(0, y);
-        gridCtx.lineTo(gridCanvas.width, y);
+        gridCtx.moveTo(worldXMin, y);
+        gridCtx.lineTo(worldXMax, y);
         gridCtx.stroke();
     }
 
+    // major lines
     gridCtx.strokeStyle = '#cbd5e1';
-    gridCtx.lineWidth = 2;
-    for (let x = 0; x <= gridCanvas.width; x += GRID_SIZE * 5) {
+    gridCtx.lineWidth = 2 / Math.max(scale, 0.0001);
+
+    startX = Math.floor(worldXMin / (GRID_SIZE * 5)) * (GRID_SIZE * 5);
+    for (let x = startX; x <= worldXMax; x += GRID_SIZE * 5) {
         gridCtx.beginPath();
-        gridCtx.moveTo(x, 0);
-        gridCtx.lineTo(x, gridCanvas.height);
+        gridCtx.moveTo(x, worldYMin);
+        gridCtx.lineTo(x, worldYMax);
         gridCtx.stroke();
     }
-    for (let y = 0; y <= gridCanvas.height; y += GRID_SIZE * 5) {
+    startY = Math.floor(worldYMin / (GRID_SIZE * 5)) * (GRID_SIZE * 5);
+    for (let y = startY; y <= worldYMax; y += GRID_SIZE * 5) {
         gridCtx.beginPath();
-        gridCtx.moveTo(0, y);
-        gridCtx.lineTo(gridCanvas.width, y);
+        gridCtx.moveTo(worldXMin, y);
+        gridCtx.lineTo(worldXMax, y);
         gridCtx.stroke();
     }
 
+    // draw axis numbers in screen-space so they are readable
     if (showAxesNumbers) {
-        drawAxisNumbers();
-    }
-}
+        gridCtx.setTransform(1, 0, 0, 1, 0, 0); // reset
+        gridCtx.fillStyle = '#64748b';
+        gridCtx.font = '11px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+        gridCtx.textAlign = 'center';
+        gridCtx.textBaseline = 'top';
 
-function drawAxisNumbers() {
-    gridCtx.fillStyle = '#64748b';
-    gridCtx.font = '11px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
-    gridCtx.textAlign = 'center';
-    gridCtx.textBaseline = 'top';
+        startX = Math.floor(worldXMin / (GRID_SIZE * 5)) * (GRID_SIZE * 5);
+        for (let x = startX; x <= worldXMax; x += GRID_SIZE * 5) {
+            const sx = x * scale + offsetX;
+            if (sx >= 0 && sx <= gridCanvas.width) {
+                gridCtx.fillText((x / GRID_SIZE).toString(), sx + 2, 2);
+            }
+        }
 
-    for (let x = 0; x <= gridCanvas.width; x += GRID_SIZE * 5) {
-        gridCtx.fillText((x / GRID_SIZE).toString(), x + 2, 2);
-    }
-
-    gridCtx.textAlign = 'right';
-    gridCtx.textBaseline = 'middle';
-    for (let y = 0; y <= gridCanvas.height; y += GRID_SIZE * 5) {
-        gridCtx.fillText((y / GRID_SIZE).toString(), 28, y + 2);
+        gridCtx.textAlign = 'right';
+        gridCtx.textBaseline = 'middle';
+        startY = Math.floor(worldYMin / (GRID_SIZE * 5)) * (GRID_SIZE * 5);
+        for (let y = startY; y <= worldYMax; y += GRID_SIZE * 5) {
+            const sy = y * scale + offsetY;
+            if (sy >= 0 && sy <= gridCanvas.height) {
+                gridCtx.fillText((y / GRID_SIZE).toString(), 28, sy + 2);
+            }
+        }
+    } else {
+        // reset transform before returning so other code isn't surprised
+        gridCtx.setTransform(1, 0, 0, 1, 0, 0);
     }
 }
 
@@ -97,10 +149,9 @@ function snapToGrid(value) {
 
 function getMousePos(e) {
     const rect = shapesCanvas.getBoundingClientRect();
-    return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-    };
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    return screenToWorld(screenX, screenY);
 }
 
 function getSnappedPos(pos) {
@@ -127,6 +178,7 @@ function getTypeColor(type) {
         case 'triangle': return '#2563eb';
         case 'square': return '#16a34a';
         case 'circle': return '#8b5cf6';
+        case 'polygon': return '#0ea5a4';
         default: return '#2563eb';
     }
 }
@@ -136,12 +188,10 @@ function drawShape(shape) {
     const isSelected = shape === selectedShape;
     const isCollision = shape.collision;
 
+    // draw filled shape in world coordinates (transform applied by caller)
     ctx.beginPath();
     if (shape.points.length > 0) {
         ctx.moveTo(shape.points[0].x, shape.points[0].y);
-        for (let i = 1; i < shape.points.length; i++) {
-            ctx.lineTo(shape.points[i].x, shape.points[i].y);
-        }
         if (shape.type === 'circle' && shape.points.length >= 2) {
             const center = shape.points[0];
             const radius = Math.sqrt(
@@ -150,6 +200,9 @@ function drawShape(shape) {
             );
             ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
         } else {
+            for (let i = 1; i < shape.points.length; i++) {
+                ctx.lineTo(shape.points[i].x, shape.points[i].y);
+            }
             ctx.closePath();
         }
     }
@@ -162,35 +215,61 @@ function drawShape(shape) {
         ctx.strokeStyle = shape.color;
     }
 
-    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.lineWidth = isSelected ? 3 / Math.max(scale, 0.0001) : 2 / Math.max(scale, 0.0001);
     ctx.fill();
     ctx.stroke();
 
-    shape.points.forEach((point, index) => {
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, POINT_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected || hoveredPoint === point ? shape.color : 'white';
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 2;
-        ctx.fill();
-        ctx.stroke();
-    });
-
+    // draw angle labels (in world space so they move with zoom)
     if (isSelected && shape.type === 'triangle') {
         drawAngles(shape);
     }
 }
 
 function drawAllShapes() {
+    // clear shapes canvas fully
+    shapesCtx.setTransform(1, 0, 0, 1, 0, 0);
     shapesCtx.clearRect(0, 0, shapesCanvas.width, shapesCanvas.height);
+
+    // apply world transform for drawing shapes
+    shapesCtx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
     shapes.forEach(shape => drawShape(shape));
 
+    // draw preview shape (in world coords)
     if (currentShapePoints.length > 0) {
         drawPreviewShape();
+    }
+
+    // draw point handles in screen space so they stay constant-size
+    shapesCtx.setTransform(1, 0, 0, 1, 0, 0);
+    shapes.forEach(shape => {
+        shape.points.forEach((point) => {
+            const s = worldToScreen(point.x, point.y);
+            shapesCtx.beginPath();
+            shapesCtx.arc(s.x, s.y, POINT_RADIUS, 0, Math.PI * 2);
+            const fill = (shape === selectedShape || hoveredPoint === point) ? shape.color : 'white';
+            shapesCtx.fillStyle = fill;
+            shapesCtx.strokeStyle = '#1e293b';
+            shapesCtx.lineWidth = 2;
+            shapesCtx.fill();
+            shapesCtx.stroke();
+        });
+    });
+
+    // preview points in screen space
+    if (currentShapePoints.length > 0) {
+        currentShapePoints.forEach(point => {
+            const s = worldToScreen(point.x, point.y);
+            shapesCtx.beginPath();
+            shapesCtx.arc(s.x, s.y, POINT_RADIUS, 0, Math.PI * 2);
+            shapesCtx.fillStyle = '#94a3b8';
+            shapesCtx.fill();
+        });
     }
 }
 
 function drawPreviewShape() {
+    // draw preview using world transform
+    shapesCtx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
     const ctx = shapesCtx;
     ctx.beginPath();
     ctx.moveTo(currentShapePoints[0].x, currentShapePoints[0].y);
@@ -198,25 +277,21 @@ function drawPreviewShape() {
         ctx.lineTo(currentShapePoints[i].x, currentShapePoints[i].y);
     }
     ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 2 / Math.max(scale, 0.0001);
+    ctx.setLineDash([5 / Math.max(scale, 0.0001), 5 / Math.max(scale, 0.0001)]);
     ctx.stroke();
     ctx.setLineDash([]);
-
-    currentShapePoints.forEach(point => {
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, POINT_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = '#94a3b8';
-        ctx.fill();
-    });
 }
 
 function findPointAtPosition(pos) {
+    // pos is in world coords
     for (let shape of shapes) {
         for (let i = 0; i < shape.points.length; i++) {
             const point = shape.points[i];
             const dist = Math.sqrt(Math.pow(pos.x - point.x, 2) + Math.pow(pos.y - point.y, 2));
-            if (dist < POINT_RADIUS * 2) {
+            // use threshold in world units derived from POINT_RADIUS screen pixels
+            const worldRadius = POINT_RADIUS / Math.max(scale, 0.0001);
+            if (dist < worldRadius * 1.8) {
                 return { shape, index: i, point };
             }
         }
@@ -234,6 +309,12 @@ function findShapeAtPosition(pos) {
 }
 
 function isPointInShape(pos, shape) {
+    if (shape.type === 'circle' && shape.points.length >= 2) {
+        const center = shape.points[0];
+        const r = Math.sqrt(Math.pow(shape.points[1].x - center.x, 2) + Math.pow(shape.points[1].y - center.y, 2));
+        const d = Math.sqrt(Math.pow(pos.x - center.x, 2) + Math.pow(pos.y - center.y, 2));
+        return d <= r;
+    }
     if (shape.points.length < 3) return false;
 
     let inside = false;
@@ -332,8 +413,10 @@ function drawAngles(shape) {
 
     shape.points.forEach((point, i) => {
         const angle = i === 0 ? angles.A : i === 1 ? angles.B : angles.C;
-        const offset = 15;
-        ctx.fillText(angle + '°', point.x + offset, point.y - offset);
+        const offset = 0.75 * GRID_SIZE; // world units so it moves with zoom
+        const ox = point.x + offset;
+        const oy = point.y - offset;
+        ctx.fillText(angle + '°', ox, oy);
     });
 }
 
@@ -384,8 +467,20 @@ function updateInfoPanel() {
 }
 
 shapesCanvas.addEventListener('mousedown', (e) => {
+    const rect = shapesCanvas.getBoundingClientRect();
     const pos = getMousePos(e);
     const snappedPos = getSnappedPos(pos);
+
+    // Right-click pan
+    if (e.button === 2) {
+        isPanning = true;
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+        panStartOffsetX = offsetX;
+        panStartOffsetY = offsetY;
+        e.preventDefault();
+        return;
+    }
 
     if (currentShapeType) {
         if (currentShapeType === 'square' && currentShapePoints.length === 0) {
@@ -459,21 +554,98 @@ shapesCanvas.addEventListener('mousedown', (e) => {
 });
 
 shapesCanvas.addEventListener('mousemove', (e) => {
-    const pos = getMousePos(e);
+    // Pan with right-click
+    if (isPanning) {
+        const deltaX = e.clientX - panStartX;
+        const deltaY = e.clientY - panStartY;
+        offsetX = panStartOffsetX + deltaX;
+        offsetY = panStartOffsetY + deltaY;
+        drawGrid();
+        drawAllShapes();
+        return;
+    }
+
+    const rect = shapesCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const pos = screenToWorld(screenX, screenY);
+
+    lastDragPos = pos;
+
+    if ((isDragging && selectedShape && dragPointIndex >= 0) || (isDraggingShape && selectedShape)) {
+        if (!isDragQueued) {
+            isDragQueued = true;
+            requestAnimationFrame(processDrag);
+        }
+        return;
+    }
+
+    const pointFound = findPointAtPosition(pos);
+    if (pointFound) {
+        hoveredPoint = pointFound.point;
+        tooltip.textContent = `(${(pointFound.point.x / GRID_SIZE).toFixed(1)}, ${(pointFound.point.y / GRID_SIZE).toFixed(1)})`;
+        tooltip.classList.add('visible');
+        tooltip.style.left = (screenX + 15) + 'px';
+        tooltip.style.top = (screenY + 15) + 'px';
+        shapesCanvas.style.cursor = 'pointer';
+        drawAllShapes();
+    } else {
+        if (hoveredPoint) {
+            hoveredPoint = null;
+            tooltip.classList.remove('visible');
+            shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
+            drawAllShapes();
+        } else if (!tooltip.classList.contains('visible')) {
+            shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
+        }
+    }
+});
+
+shapesCanvas.addEventListener('mouseup', (e) => {
+    if (e.button === 2) {
+        isPanning = false;
+    }
+    isDragging = false;
+    dragPointIndex = -1;
+    isDraggingShape = false;
+});
+
+shapesCanvas.addEventListener('mouseleave', () => {
+    tooltip.classList.remove('visible');
+    isPanning = false;
+    isDragging = false;
+    dragPointIndex = -1;
+    isDraggingShape = false;
+});
+
+shapesCanvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+});
+shapesCanvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+});
+shapesCanvas.addEventListener('mousemove', (e) => {
+    const rect = shapesCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const pos = screenToWorld(screenX, screenY);
     const snappedPos = getSnappedPos(pos);
 
     if (isDragging && selectedShape && dragPointIndex >= 0) {
+        // snap point in world coordinates
         selectedShape.points[dragPointIndex] = snappedPos;
         checkCollisions();
+        updateInfoPanel();
         drawAllShapes();
         return;
     }
 
     if (isDraggingShape && selectedShape) {
-        const newBaseX = pos.x - dragOffset.x;
-        const newBaseY = pos.y - dragOffset.y;
-        const snappedBaseX = snapToGrid(newBaseX);
-        const snappedBaseY = snapToGrid(newBaseY);
+        // move whole shape: compute new base (world) and snap that base
+        const newBaseWorldX = pos.x - dragOffset.x;
+        const newBaseWorldY = pos.y - dragOffset.y;
+        const snappedBaseX = snapToGrid(newBaseWorldX);
+        const snappedBaseY = snapToGrid(newBaseWorldY);
 
         const originalBase = selectedShape.points[0];
         const dx = snappedBaseX - originalBase.x;
@@ -484,10 +656,12 @@ shapesCanvas.addEventListener('mousemove', (e) => {
             point.y += dy;
         });
 
+        // recompute dragOffset relative to moved shape
         dragOffset.x = pos.x - selectedShape.points[0].x;
         dragOffset.y = pos.y - selectedShape.points[0].y;
 
         checkCollisions();
+        updateInfoPanel();
         drawAllShapes();
         return;
     }
@@ -495,10 +669,11 @@ shapesCanvas.addEventListener('mousemove', (e) => {
     const pointFound = findPointAtPosition(pos);
     if (pointFound) {
         hoveredPoint = pointFound.point;
-        tooltip.textContent = `(${pointFound.point.x / GRID_SIZE}, ${pointFound.point.y / GRID_SIZE})`;
+        // show coordinates in grid units with one decimal
+        tooltip.textContent = `(${(pointFound.point.x / GRID_SIZE).toFixed(1)}, ${(pointFound.point.y / GRID_SIZE).toFixed(1)})`;
         tooltip.classList.add('visible');
-        tooltip.style.left = (pos.x + 15) + 'px';
-        tooltip.style.top = (pos.y + 15) + 'px';
+        tooltip.style.left = (screenX + 15) + 'px';
+        tooltip.style.top = (screenY + 15) + 'px';
         shapesCanvas.style.cursor = 'pointer';
         drawAllShapes();
     } else {
@@ -606,12 +781,20 @@ createBtn.addEventListener('click', () => {
         }
     }
 
-    if (points.length >= 3) {
-        let type = 'triangle';
-        if (points.length === 4) {
-            type = 'square';
-        } else if (points.length === 2) {
+    if (points.length >= 2) {
+        let type = 'polygon';
+        if (points.length === 2) {
             type = 'circle';
+        } else if (points.length === 3) {
+            type = 'triangle';
+        } else if (points.length === 4) {
+            // if the 4 points form an axis-aligned square, mark as square
+            const dx1 = Math.abs(points[0].x - points[1].x);
+            const dy1 = Math.abs(points[0].y - points[1].y);
+            const isAxisAlignedSquare = (dx1 === Math.abs(points[1].x - points[2].x) && dy1 === Math.abs(points[1].y - points[2].y));
+            type = isAxisAlignedSquare ? 'square' : 'polygon';
+        } else {
+            type = 'polygon';
         }
 
         createShape(type, points);
@@ -625,8 +808,10 @@ createBtn.addEventListener('click', () => {
 showAxesToggle.addEventListener('change', (e) => {
     showAxesNumbers = e.target.checked;
     drawGrid();
+    drawAllShapes();
 });
 
+// keyboard shortcuts
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedShape) {
@@ -652,8 +837,229 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+// ...existing code...
+
+// Add zoom controls UI
+const zoomControlsHTML = `
+    <div class="zoom-controls">
+        <button class="btn" id="zoomInBtn" title="Zoom In (+)">
+            <svg viewBox="0 0 24 24"><text x="12" y="16" text-anchor="middle" font-size="18" font-weight="bold" fill="currentColor">+</text></svg>
+        </button>
+        <button class="btn" id="zoomOutBtn" title="Zoom Out (-)">
+            <svg viewBox="0 0 24 24"><text x="12" y="16" text-anchor="middle" font-size="18" font-weight="bold" fill="currentColor">−</text></svg>
+        </button>
+        <button class="btn" id="resetViewBtn" title="Reset View">
+            <svg viewBox="0 0 24 24"><path d="M 4 12 A 8 8 0 0 1 20 12 M 18 10 L 20 12 L 18 14" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+    </div>
+`;
+
+document.body.insertAdjacentHTML('beforeend', zoomControlsHTML);
+
+// Add CSS for zoom controls
+const zoomControlsStyle = document.createElement('style');
+zoomControlsStyle.textContent = `
+    .zoom-controls {
+        position: fixed;
+        right: 20px;
+        top: 100px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 100;
+    }
+
+    .zoom-controls .btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .zoom-controls svg {
+        width: 20px;
+        height: 20px;
+    }
+`;
+document.head.appendChild(zoomControlsStyle);
+
+// Zoom function
+function setZoom(newScale) {
+    const clampedScale = Math.min(5, Math.max(0.2, newScale));
+    scale = clampedScale;
+    
+    // center view on canvas center
+    const centerScreenX = shapesCanvas.width / 2;
+    const centerScreenY = shapesCanvas.height / 2;
+    offsetX = centerScreenX;
+    offsetY = centerScreenY;
+    
+    drawGrid();
+    drawAllShapes();
+}
+
+// Zoom button handlers
+document.getElementById('zoomInBtn').addEventListener('click', () => {
+    setZoom(scale * 1.2);
+});
+
+document.getElementById('zoomOutBtn').addEventListener('click', () => {
+    setZoom(scale / 1.2);
+});
+
+document.getElementById('resetViewBtn').addEventListener('click', () => {
+    scale = 1;
+    offsetX = 0;
+    offsetY = 0;
+    drawGrid();
+    drawAllShapes();
+});
+
+// Smooth drag: use requestAnimationFrame for smoother movement
+let lastDragPos = { x: 0, y: 0 };
+let isDragQueued = false;
+
+function processDrag() {
+    isDragQueued = false;
+    
+    if (isDragging && selectedShape && dragPointIndex >= 0) {
+        const snappedPos = getSnappedPos(lastDragPos);
+        selectedShape.points[dragPointIndex] = snappedPos;
+        checkCollisions();
+        updateInfoPanel();
+        drawAllShapes();
+    } else if (isDraggingShape && selectedShape) {
+        const snappedBaseX = snapToGrid(lastDragPos.x - dragOffset.x);
+        const snappedBaseY = snapToGrid(lastDragPos.y - dragOffset.y);
+
+        const originalBase = selectedShape.points[0];
+        const dx = snappedBaseX - originalBase.x;
+        const dy = snappedBaseY - originalBase.y;
+
+        if (dx !== 0 || dy !== 0) {
+            selectedShape.points.forEach(point => {
+                point.x += dx;
+                point.y += dy;
+            });
+
+            dragOffset.x = lastDragPos.x - selectedShape.points[0].x;
+            dragOffset.y = lastDragPos.y - selectedShape.points[0].y;
+
+            checkCollisions();
+            updateInfoPanel();
+            drawAllShapes();
+        }
+    }
+}
+createBtn.addEventListener('click', () => {
+    const input = coordInput.value.trim();
+    if (!input) return;
+
+    const parts = input.split(/\s+/);
+    const points = [];
+
+    for (let part of parts) {
+        const coords = part.split(',');
+        if (coords.length === 2) {
+            const x = parseFloat(coords[0]) * GRID_SIZE;
+            const y = parseFloat(coords[1]) * GRID_SIZE;
+            if (!isNaN(x) && !isNaN(y)) {
+                points.push({ x, y });
+            }
+        }
+    }
+
+    // Allow creating with as few as 2 points
+    if (points.length >= 2) {
+        let type = 'polygon';
+        
+        if (points.length === 2) {
+            type = 'circle';
+        } else if (points.length === 3) {
+            type = 'triangle';
+        } else if (points.length === 4) {
+            // check if it's an axis-aligned square
+            const dx1 = Math.abs(points[0].x - points[1].x);
+            const dy1 = Math.abs(points[0].y - points[1].y);
+            const dx2 = Math.abs(points[1].x - points[2].x);
+            const dy2 = Math.abs(points[1].y - points[2].y);
+            const isAxisAlignedSquare = (dx1 === dx2 && dy1 === dy2);
+            type = isAxisAlignedSquare ? 'square' : 'polygon';
+        } else {
+            type = 'polygon';
+        }
+
+        createShape(type, points);
+        checkCollisions();
+        updateInfoPanel();
+        drawAllShapes();
+        coordInput.value = '';
+    } else if (points.length === 1) {
+        // show error or just ignore
+        console.warn('Need at least 2 coordinate pairs');
+    }
+});
+shapesCanvas.addEventListener('mousemove', (e) => {
+    const rect = shapesCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const pos = screenToWorld(screenX, screenY);
+
+    lastDragPos = pos;
+
+    if ((isDragging && selectedShape && dragPointIndex >= 0) || (isDraggingShape && selectedShape)) {
+        if (!isDragQueued) {
+            isDragQueued = true;
+            requestAnimationFrame(processDrag);
+        }
+        return;
+    }
+
+    const pointFound = findPointAtPosition(pos);
+    if (pointFound) {
+        hoveredPoint = pointFound.point;
+        tooltip.textContent = `(${(pointFound.point.x / GRID_SIZE).toFixed(1)}, ${(pointFound.point.y / GRID_SIZE).toFixed(1)})`;
+        tooltip.classList.add('visible');
+        tooltip.style.left = (screenX + 15) + 'px';
+        tooltip.style.top = (screenY + 15) + 'px';
+        shapesCanvas.style.cursor = 'pointer';
+        drawAllShapes();
+    } else {
+        if (hoveredPoint) {
+            hoveredPoint = null;
+            tooltip.classList.remove('visible');
+            shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
+            drawAllShapes();
+        } else if (!tooltip.classList.contains('visible')) {
+            shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
+        }
+    }
+});
+
+// ...existing code...
+// zoom handling: wheel to zoom centered at mouse
+shapesCanvas.addEventListener('wheel', (e) => {
+    const rect = shapesCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const worldBefore = screenToWorld(screenX, screenY);
+
+    // zoom factor per wheel event (smooth)
+    const delta = -e.deltaY;
+    const zoomFactor = delta > 0 ? 1.1 : 0.9;
+
+    const newScale = Math.min(5, Math.max(0.2, scale * zoomFactor));
+    scale = newScale;
+
+    // keep the worldBefore point under the mouse after zoom
+    offsetX = screenX - worldBefore.x * scale;
+    offsetY = screenY - worldBefore.y * scale;
+
+    e.preventDefault();
+    drawGrid();
+    drawAllShapes();
+}, { passive: false });
 
 window.addEventListener('resize', resizeCanvases);
 
 resizeCanvases();
 drawGrid();
+// ...existing code...
