@@ -9,6 +9,11 @@ const shapesCtx = shapesCanvas.getContext('2d');
 const tooltip = document.getElementById('tooltip');
 const selectedInfo = document.getElementById('selectedInfo');
 const pointsInfo = document.getElementById('pointsInfo');
+const anglesInfo = document.getElementById('anglesInfo');
+const anglesRow = document.getElementById('anglesRow');
+const coordInput = document.getElementById('coordInput');
+const createBtn = document.getElementById('createBtn');
+const showAxesToggle = document.getElementById('showAxesToggle');
 
 let shapes = [];
 let selectedShape = null;
@@ -19,6 +24,7 @@ let dragPointIndex = -1;
 let isDraggingShape = false;
 let dragOffset = { x: 0, y: 0 };
 let hoveredPoint = null;
+let showAxesNumbers = false;
 
 function resizeCanvases() {
     gridCanvas.width = window.innerWidth;
@@ -61,6 +67,27 @@ function drawGrid() {
         gridCtx.moveTo(0, y);
         gridCtx.lineTo(gridCanvas.width, y);
         gridCtx.stroke();
+    }
+
+    if (showAxesNumbers) {
+        drawAxisNumbers();
+    }
+}
+
+function drawAxisNumbers() {
+    gridCtx.fillStyle = '#64748b';
+    gridCtx.font = '11px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+    gridCtx.textAlign = 'center';
+    gridCtx.textBaseline = 'top';
+
+    for (let x = 0; x <= gridCanvas.width; x += GRID_SIZE * 5) {
+        gridCtx.fillText((x / GRID_SIZE).toString(), x + 2, 2);
+    }
+
+    gridCtx.textAlign = 'right';
+    gridCtx.textBaseline = 'middle';
+    for (let y = 0; y <= gridCanvas.height; y += GRID_SIZE * 5) {
+        gridCtx.fillText((y / GRID_SIZE).toString(), 28, y + 2);
     }
 }
 
@@ -148,6 +175,10 @@ function drawShape(shape) {
         ctx.fill();
         ctx.stroke();
     });
+
+    if (isSelected && shape.type === 'triangle') {
+        drawAngles(shape);
+    }
 }
 
 function drawAllShapes() {
@@ -256,6 +287,56 @@ function getShapeCenter(shape) {
     };
 }
 
+function calculateAngles(shape) {
+    if (shape.type !== 'triangle' || shape.points.length < 3) {
+        return null;
+    }
+
+    const p1 = shape.points[0];
+    const p2 = shape.points[1];
+    const p3 = shape.points[2];
+
+    function getAngle(pA, pB, pC) {
+        const dx1 = pA.x - pB.x;
+        const dy1 = pA.y - pB.y;
+        const dx2 = pC.x - pB.x;
+        const dy2 = pC.y - pB.y;
+
+        const dot = dx1 * dx2 + dy1 * dy2;
+        const mag1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+        const mag2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+        if (mag1 === 0 || mag2 === 0) return 0;
+
+        const cos = dot / (mag1 * mag2);
+        const angle = Math.acos(Math.max(-1, Math.min(1, cos)));
+        return (angle * 180 / Math.PI).toFixed(1);
+    }
+
+    return {
+        A: getAngle(p2, p1, p3),
+        B: getAngle(p1, p2, p3),
+        C: getAngle(p1, p3, p2)
+    };
+}
+
+function drawAngles(shape) {
+    const angles = calculateAngles(shape);
+    if (!angles) return;
+
+    const ctx = shapesCtx;
+    ctx.fillStyle = shape.color;
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    shape.points.forEach((point, i) => {
+        const angle = i === 0 ? angles.A : i === 1 ? angles.B : angles.C;
+        const offset = 15;
+        ctx.fillText(angle + '°', point.x + offset, point.y - offset);
+    });
+}
+
 function rotateShape(shape) {
     const center = getShapeCenter(shape);
 
@@ -285,9 +366,20 @@ function updateInfoPanel() {
     if (selectedShape) {
         selectedInfo.textContent = selectedShape.type.charAt(0).toUpperCase() + selectedShape.type.slice(1);
         pointsInfo.textContent = selectedShape.points.length;
+
+        if (selectedShape.type === 'triangle') {
+            const angles = calculateAngles(selectedShape);
+            if (angles) {
+                anglesInfo.textContent = `A: ${angles.A}°, B: ${angles.B}°, C: ${angles.C}°`;
+                anglesRow.style.display = 'flex';
+            }
+        } else {
+            anglesRow.style.display = 'none';
+        }
     } else {
         selectedInfo.textContent = 'None';
         pointsInfo.textContent = shapes.reduce((sum, s) => sum + s.points.length, 0);
+        anglesRow.style.display = 'none';
     }
 }
 
@@ -494,6 +586,45 @@ document.getElementById('clearBtn').addEventListener('click', () => {
     checkCollisions();
     updateInfoPanel();
     drawAllShapes();
+});
+
+createBtn.addEventListener('click', () => {
+    const input = coordInput.value.trim();
+    if (!input) return;
+
+    const parts = input.split(/\s+/);
+    const points = [];
+
+    for (let part of parts) {
+        const coords = part.split(',');
+        if (coords.length === 2) {
+            const x = parseFloat(coords[0]) * GRID_SIZE;
+            const y = parseFloat(coords[1]) * GRID_SIZE;
+            if (!isNaN(x) && !isNaN(y)) {
+                points.push({ x, y });
+            }
+        }
+    }
+
+    if (points.length >= 3) {
+        let type = 'triangle';
+        if (points.length === 4) {
+            type = 'square';
+        } else if (points.length === 2) {
+            type = 'circle';
+        }
+
+        createShape(type, points);
+        checkCollisions();
+        updateInfoPanel();
+        drawAllShapes();
+        coordInput.value = '';
+    }
+});
+
+showAxesToggle.addEventListener('change', (e) => {
+    showAxesNumbers = e.target.checked;
+    drawGrid();
 });
 
 document.addEventListener('keydown', (e) => {

@@ -34,6 +34,12 @@
         </div>
 
         <div class="tool-group">
+            <span class="tool-label">Coordinates</span>
+            <input type="text" class="coord-input" id="coordInput" placeholder="x1,y1 x2,y2 x3,y3" title="Enter coordinates separated by spaces">
+            <button class="btn" id="createBtn" title="Create from coordinates">Create</button>
+        </div>
+
+        <div class="tool-group">
             <span class="tool-label">Transform</span>
             <button class="btn" id="rotateBtn" title="Rotate 90°">
                 <svg viewBox="0 0 24 24"><path d="M 12 4 A 8 8 0 0 1 20 12 L 17 12 L 20 16 L 23 12 L 20 12 A 11 11 0 1 0 12 23" fill="none" stroke="currentColor" stroke-width="2" fill="currentColor"/></svg>
@@ -69,7 +75,16 @@
             <span class="info-label">Points:</span>
             <span class="info-value" id="pointsInfo">0</span>
         </div>
+        <div class="info-row" id="anglesRow" style="display: none;">
+            <span class="info-label">Angles:</span>
+            <span class="info-value" id="anglesInfo">-</span>
+        </div>
     </div>
+
+    <label class="toggle-label">
+        <input type="checkbox" id="showAxesToggle">
+        <span>Show Axes Numbers</span>
+    </label>
 
     <div class="tooltip" id="tooltip"></div>
 
