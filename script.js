@@ -4,7 +4,6 @@ const SNAP_THRESHOLD = 10;
 const POINT_RADIUS = 6; // screen pixels for handles
 
 const gridCanvas = document.getElementById('gridCanvas');
-const shapesCanvas = document.getElementById('shapesCanvas');
 const gridCtx = gridCanvas.getContext('2d');
 const shapesCtx = shapesCanvas.getContext('2d');
 const tooltip = document.getElementById('tooltip');
@@ -16,6 +15,12 @@ const coordInput = document.getElementById('coordInput');
 const createBtn = document.getElementById('createBtn');
 const showAxesToggle = document.getElementById('showAxesToggle');
 
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartOffsetX = 0;
+let touchStartOffsetY = 0;
+let isTouchPanning = false;
+let lastTouchDistance = 0;
 let isPanning = false;
 let panStartX = 0;
 let panStartY = 0;
@@ -50,6 +55,12 @@ function worldToScreen(worldX, worldY) {
         y: worldY * scale + offsetY
     };
 }
+function getTouchDistance(touches) {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
 
 function resizeCanvases() {
     gridCanvas.width = window.innerWidth;
@@ -60,6 +71,279 @@ function resizeCanvases() {
     drawGrid();
     drawAllShapes();
 }
+
+function saveToJSON() {
+    const data = {
+        shapes: shapes,
+        scale: scale,
+        offsetX: offsetX,
+        offsetY: offsetY
+    };
+    
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `geoshapes-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function loadFromJSON(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            shapes = data.shapes || [];
+            scale = data.scale || 1;
+            offsetX = data.offsetX || 0;
+            offsetY = data.offsetY || 0;
+            selectedShape = null;
+            checkCollisions();
+            updateInfoPanel();
+            drawGrid();
+            drawAllShapes();
+        } catch (err) {
+            alert('Error loading file: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// Add hidden file input for loading
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.accept = '.json';
+fileInput.style.display = 'none';
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) {
+        loadFromJSON(e.target.files[0]);
+        fileInput.value = '';
+    }
+});
+document.body.appendChild(fileInput);
+
+// Add Save/Load buttons to toolbar
+const saveLoadHTML = `
+    <div class="save-load-controls">
+        <button class="btn" id="saveBtn" title="Save (Ctrl+S)">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="512" height="512" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <!-- outer shape -->
+            <path d="M4 4h12l4 4v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+            
+            <!-- top slot -->
+            <path d="M8 4v5h8V4"/>
+            
+            <!-- label / disk window -->
+            <rect x="8" y="13" width="8" height="5" rx="1"/>
+            </svg>
+        </button>
+        <button class="btn" id="loadBtn" title="Load">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Tray -->
+            <path d="M3 15V18C3 19.1 3.9 20 5 20H19C20.1 20 21 19.1 21 18V15"
+                    stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            
+            <!-- Arrow shaft -->
+            <path d="M12 3V14"
+                    stroke="black" stroke-width="2" stroke-linecap="round"/>
+            
+            <!-- Arrow head -->
+            <path d="M8 10L12 14L16 10"
+                    stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+    </div>
+`;
+
+// Find toolbar and insert before zoom controls
+const toolbar = document.querySelector('.toolbar') || document.body;
+const zoomControls = document.querySelector('.zoom-controls');
+if (zoomControls && zoomControls.parentNode) {
+    zoomControls.parentNode.insertBefore(
+        document.createElement('div'),
+        zoomControls
+    );
+    const lastInserted = document.querySelector('.zoom-controls').previousElementSibling;
+    lastInserted.innerHTML = saveLoadHTML;
+} else {
+    document.body.insertAdjacentHTML('beforeend', saveLoadHTML);
+}
+
+// Add CSS for save/load buttons
+const saveLoadStyle = document.createElement('style');
+saveLoadStyle.textContent = `
+    .save-load-controls {
+        position: fixed;
+        right: 20px;
+        top: 20px;
+        display: flex;
+        gap: 8px;
+        z-index: 100;
+    }
+
+    .save-load-controls .btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .save-load-controls svg {
+        width: 20px;
+        height: 20px;
+    }
+`;
+document.head.appendChild(saveLoadStyle);
+
+// Button handlers
+document.getElementById('saveBtn').addEventListener('click', saveToJSON);
+document.getElementById('loadBtn').addEventListener('click', () => fileInput.click());
+
+// Keyboard shortcut: Ctrl+S to save
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveToJSON();
+    }
+});
+shapesCanvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+        isTouchPanning = true;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartOffsetX = offsetX;
+        touchStartOffsetY = offsetY;
+        lastTouchDistance = getTouchDistance(e.touches);
+        return;
+    }
+
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const rect = shapesCanvas.getBoundingClientRect();
+        const screenX = touch.clientX - rect.left;
+        const screenY = touch.clientY - rect.top;
+        const pos = screenToWorld(screenX, screenY);
+        const snappedPos = getSnappedPos(pos);
+
+        if (currentShapeType) {
+            if (currentShapeType === 'square' && currentShapePoints.length === 0) {
+                currentShapePoints.push(snappedPos);
+            } else if (currentShapeType === 'square' && currentShapePoints.length === 1) {
+                const p1 = currentShapePoints[0];
+                const size = Math.max(Math.abs(snappedPos.x - p1.x), Math.abs(snappedPos.y - p1.y));
+                const dx = snappedPos.x >= p1.x ? size : -size;
+                const dy = snappedPos.y >= p1.y ? size : -size;
+                const points = [
+                    { x: p1.x, y: p1.y },
+                    { x: p1.x + dx, y: p1.y },
+                    { x: p1.x + dx, y: p1.y + dy },
+                    { x: p1.x, y: p1.y + dy }
+                ];
+                createShape('square', points);
+                currentShapePoints = [];
+                currentShapeType = null;
+                document.querySelectorAll('[data-shape]').forEach(btn => btn.classList.remove('active'));
+            } else if (currentShapeType === 'triangle') {
+                currentShapePoints.push(snappedPos);
+                if (currentShapePoints.length === 3) {
+                    createShape('triangle', currentShapePoints);
+                    currentShapePoints = [];
+                    currentShapeType = null;
+                    document.querySelectorAll('[data-shape]').forEach(btn => btn.classList.remove('active'));
+                }
+            } else if (currentShapeType === 'circle') {
+                currentShapePoints.push(snappedPos);
+                if (currentShapePoints.length === 2) {
+                    createShape('circle', currentShapePoints);
+                    currentShapePoints = [];
+                    currentShapeType = null;
+                    document.querySelectorAll('[data-shape]').forEach(btn => btn.classList.remove('active'));
+                }
+            }
+            checkCollisions();
+            drawAllShapes();
+            return;
+        }
+
+        const pointFound = findPointAtPosition(pos);
+        if (pointFound) {
+            isDragging = true;
+            dragPointIndex = pointFound.index;
+            selectedShape = pointFound.shape;
+            dragOffset = {
+                x: pos.x - pointFound.point.x,
+                y: pos.y - pointFound.point.y
+            };
+            updateInfoPanel();
+            drawAllShapes();
+            return;
+        }
+
+        const shapeFound = findShapeAtPosition(pos);
+        if (shapeFound) {
+            isDraggingShape = true;
+            selectedShape = shapeFound;
+            dragOffset = {
+                x: pos.x - shapeFound.points[0].x,
+                y: pos.y - shapeFound.points[0].y
+            };
+            updateInfoPanel();
+            drawAllShapes();
+        } else {
+            selectedShape = null;
+            updateInfoPanel();
+            drawAllShapes();
+        }
+    }
+}, { passive: true });
+
+shapesCanvas.addEventListener('touchmove', (e) => {
+    if (isTouchPanning && e.touches.length >= 1) {
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - touchStartX;
+        const deltaY = touch.clientY - touchStartY;
+        offsetX = touchStartOffsetX + deltaX;
+        offsetY = touchStartOffsetY + deltaY;
+        drawGrid();
+        drawAllShapes();
+
+        if (e.touches.length === 2) {
+            const distance = getTouchDistance(e.touches);
+            if (lastTouchDistance > 0) {
+                const zoomFactor = distance / lastTouchDistance;
+                const newScale = Math.min(5, Math.max(0.2, scale * zoomFactor));
+                scale = newScale;
+                drawGrid();
+                drawAllShapes();
+            }
+            lastTouchDistance = distance;
+        }
+        return;
+    }
+}, { passive: true });
+
+shapesCanvas.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0) {
+        isTouchPanning = false;
+        isDragging = false;
+        dragPointIndex = -1;
+        isDraggingShape = false;
+        lastTouchDistance = 0;
+    } else if (e.touches.length === 1) {
+        isTouchPanning = false;
+        lastTouchDistance = 0;
+    }
+}, { passive: true });
+
+shapesCanvas.addEventListener('touchcancel', (e) => {
+    isTouchPanning = false;
+    isDragging = false;
+    dragPointIndex = -1;
+    isDraggingShape = false;
+    lastTouchDistance = 0;
+}, { passive: true });
 
 function drawGrid() {
     // draw grid in world coordinates using transform
