@@ -18,7 +18,26 @@
     --shadow: rgba(0, 0, 0, 0.1);
     --collision: #f59e0b;
 }
+#toggleToolbarBtn {
+    position: relative;
+    z-index: 9999;
+}
+.toolbar.collapsed .tool-group:not(:first-child) {
+    display: none;
+}
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    overflow: hidden;
+    max-height: 500px;
+    transition: max-height 0.35s ease, opacity 0.2s ease;
+    opacity: 1;
+}
 
+.toolbar.collapsed {
+    transform: translateY(-100%);
+    opacity: 1;
+}
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     background: var(--bg-color);

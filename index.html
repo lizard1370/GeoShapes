@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+    <circle cx='50' cy='50' r='40' stroke='blue' stroke-width='6' fill='none'/>
+    <text x='50' y='58' font-size='40' text-anchor='middle' fill='white'>GS</text>
+    </svg>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeoShapes - Learn Geometry</title>
@@ -18,6 +23,7 @@
     </header>
 
     <div class="toolbar">
+        
         <div class="tool-group">
             <span class="tool-label">Shapes</span>
             <button class="btn" data-shape="triangle" title="Triangle">
@@ -64,6 +70,11 @@
             </button>
             <button class="btn" id="clearBtn" title="Clear All">Clear All</button>
         </div>
+                    <button class="btn" id="toggleToolbarBtn" title="Toggle Toolbar">
+                <svg id="toggleIcon" viewBox="0 0 24 24" width="20" height="20">
+                    <path d="M7 14l5-5 5 5" fill="none" stroke="currentColor" stroke-width="2"/>
+                </svg>
+            </button>
     </div>
 
     <div class="canvas-container">

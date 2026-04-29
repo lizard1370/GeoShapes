@@ -11,6 +11,8 @@ const selectedInfo = document.getElementById('selectedInfo');
 const pointsInfo = document.getElementById('pointsInfo');
 const anglesInfo = document.getElementById('anglesInfo');
 const anglesRow = document.getElementById('anglesRow');
+const btn = document.getElementById('toggleToolbarBtn');
+const icon = document.getElementById('toggleIcon');
 const coordInput = document.getElementById('coordInput');
 const createBtn = document.getElementById('createBtn');
 const showAxesToggle = document.getElementById('showAxesToggle');
@@ -23,6 +25,7 @@ let isTouchPanning = false;
 let lastTouchDistance = 0;
 let isPanning = false;
 let panStartX = 0;
+let hidden = false;
 let panStartY = 0;
 let panStartOffsetX = 0;
 let panStartOffsetY = 0;
@@ -129,21 +132,13 @@ document.body.appendChild(fileInput);
 
 
 
+btn.addEventListener('click', () => {
+    hidden = !hidden;
 
+    toolbar.classList.toggle('collapsed', hidden);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+    icon.style.transform = hidden ? 'rotate(180deg)' : 'rotate(0deg)';
+});
 
 const angleInputHTML = `
     <div class="angle-input-section">
