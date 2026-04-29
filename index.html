@@ -9,17 +9,16 @@
 <body>
     <header class="header">
         <div class="logo">
-        <h1 class="title">
-            <a class="Logo-L">G</a>
-            eo
-            <a class="Logo-L">S</a>
-            hapes</h1>
-            
+            <h1 class="title">
+                <a class="Logo-L">G</a>
+                eo
+                <a class="Logo-L">S</a>
+                hapes</h1>
+        </div>
     </header>
 
     <div class="toolbar">
         <div class="tool-group">
-            
             <span class="tool-label">Shapes</span>
             <button class="btn" data-shape="triangle" title="Triangle">
                 <svg viewBox="0 0 24 24"><polygon points="12,4 20,20 4,20" fill="none" stroke="currentColor" stroke-width="2"/></svg>
@@ -36,6 +35,13 @@
             <span class="tool-label">Coordinates</span>
             <input type="text" class="coord-input" id="coordInput" placeholder="x1,y1 x2,y2 x3,y3 x4,y4" title="Enter coordinates separated by spaces">
             <button class="btn" id="createBtn" title="Create from coordinates">Create</button>
+        </div>
+
+        <div class="tool-group">
+            <span class="tool-label">By Angles</span>
+            <input type="text" class="coord-input" id="angleInput" placeholder="60,60,60" title="Triangle angles or square side">
+            <input type="number" class="angle-side-input" id="sideLength" placeholder="Side" value="100" min="10" step="10" title="Side length">
+            <button class="btn" id="createAngleBtn" title="Create from angles">Create</button>
         </div>
 
         <div class="tool-group">

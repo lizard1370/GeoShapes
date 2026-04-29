@@ -126,6 +126,242 @@ fileInput.addEventListener('change', (e) => {
 });
 document.body.appendChild(fileInput);
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const angleInputHTML = `
+    <div class="angle-input-section">
+        <label>Create by Angles:</label>
+        <input type="text" id="angleInput" placeholder="e.g., 60,60,60 for equilateral" title="Enter angles separated by commas">
+        <input type="number" id="sideLength" placeholder="Side length" value="100" min="10" step="10">
+        <button class="btn" id="createAngleBtn">Create</button>
+    </div>
+`;
+
+// Insert into toolbar
+const toolbar = document.querySelector('.toolbar') || document.body;
+const coordSection = document.querySelector('[data-shape]')?.parentElement || document.body;
+if (coordSection) {
+    coordSection.insertAdjacentHTML('afterend', angleInputHTML);
+} else {
+    document.body.insertAdjacentHTML('beforeend', angleInputHTML);
+}
+
+// Add CSS for angle input
+const angleInputStyle = document.createElement('style');
+angleInputStyle.textContent = `
+    .angle-input-section {
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+        background: #f1f5f9;
+        border-radius: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .angle-input-section label {
+        font-weight: 600;
+        font-size: 14px;
+        color: #1e293b;
+    }
+
+    .angle-input-section input {
+        padding: 6px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .angle-input-section input[type="text"] {
+        flex: 1;
+        min-width: 150px;
+    }
+
+    .angle-input-section input[type="number"] {
+        width: 100px;
+    }
+
+    .angle-input-section .btn {
+        padding: 6px 12px;
+        white-space: nowrap;
+    }
+`;
+document.head.appendChild(angleInputStyle);
+
+// Function to create triangle from angles
+function createTriangleFromAngles(angles, sideLength) {
+    if (angles.length !== 3) {
+        alert('Triangle requires exactly 3 angles');
+        return null;
+    }
+
+    // Convert to radians
+    const a = angles[0] * Math.PI / 180;
+    const b = angles[1] * Math.PI / 180;
+    const c = angles[2] * Math.PI / 180;
+
+    // Using law of sines to calculate other sides
+    const sideA = sideLength;
+    const sideB = sideA * Math.sin(b) / Math.sin(a);
+    const sideC = sideA * Math.sin(c) / Math.sin(a);
+
+    // Create triangle points
+    const p1 = { x: 0, y: 0 };
+    const p2 = { x: sideA, y: 0 };
+    
+    // Third point using angle at p1
+    const p3 = {
+        x: sideC * Math.cos(a),
+        y: sideC * Math.sin(a)
+    };
+
+    // Center the triangle
+    const minX = Math.min(p1.x, p2.x, p3.x);
+    const minY = Math.min(p1.y, p2.y, p3.y);
+    const maxX = Math.max(p1.x, p2.x, p3.x);
+    const maxY = Math.max(p1.y, p2.y, p3.y);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    return [
+        { x: (p1.x - centerX) * GRID_SIZE, y: (p1.y - centerY) * GRID_SIZE },
+        { x: (p2.x - centerX) * GRID_SIZE, y: (p2.y - centerY) * GRID_SIZE },
+        { x: (p3.x - centerX) * GRID_SIZE, y: (p3.y - centerY) * GRID_SIZE }
+    ];
+}
+
+// Function to create square from angles and side
+function createSquareFromSide(sideLength) {
+    const half = sideLength / 2;
+    return [
+        { x: -half * GRID_SIZE, y: -half * GRID_SIZE },
+        { x: half * GRID_SIZE, y: -half * GRID_SIZE },
+        { x: half * GRID_SIZE, y: half * GRID_SIZE },
+        { x: -half * GRID_SIZE, y: half * GRID_SIZE }
+    ];
+}
+
+// Angle button handler
+document.getElementById('createAngleBtn').addEventListener('click', () => {
+    const angleInput = document.getElementById('angleInput').value.trim();
+    const sideLength = parseFloat(document.getElementById('sideLength').value) || 100;
+
+    if (!angleInput) {
+        alert('Enter angles');
+        return;
+    }
+
+    const angleStrs = angleInput.split(',');
+    const angles = angleStrs.map(a => parseFloat(a.trim())).filter(a => !isNaN(a));
+
+    if (angles.length === 3) {
+        // Triangle from angles
+        const sum = angles.reduce((a, b) => a + b, 0);
+        if (Math.abs(sum - 180) > 0.1) {
+            alert('Triangle angles must sum to 180°');
+            return;
+        }
+
+        const points = createTriangleFromAngles(angles, sideLength);
+        if (points) {
+            createShape('triangle', points);
+            checkCollisions();
+            updateInfoPanel();
+            drawAllShapes();
+            document.getElementById('angleInput').value = '';
+        }
+    } else if (angles.length === 1) {
+        // Square (all angles are 90)
+        const points = createSquareFromSide(angles[0]);
+        createShape('square', points);
+        checkCollisions();
+        updateInfoPanel();
+        drawAllShapes();
+        document.getElementById('angleInput').value = '';
+    } else {
+        alert('Enter 3 angles for triangle or 1 value for square side');
+    }
+});
+
+// ENABLE DECIMAL INPUT WITH SHIFT KEY
+let isDecimalMode = false;
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift') {
+        isDecimalMode = true;
+        shapesCanvas.style.cursor = 'cell';
+        const msg = document.createElement('div');
+        msg.textContent = 'Decimal Mode ON';
+        msg.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #2563eb;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            z-index: 1000;
+            pointer-events: none;
+        `;
+        document.body.appendChild(msg);
+        setTimeout(() => msg.remove(), 800);
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') {
+        isDecimalMode = false;
+        shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
+    }
+});
+
+// Override getSnappedPos when in decimal mode
+const originalGetSnappedPos = getSnappedPos;
+window.getSnappedPos = function(pos) {
+    if (isDecimalMode) {
+        // Don't snap, keep decimal precision
+        return pos;
+    }
+    return originalGetSnappedPos(pos);
+};
+
+// Update coordinate input to accept decimals
+const originalCoordInput = coordInput.value;
+coordInput.placeholder = 'x1,y1 x2,y2 x3,y3 x4,y4 (decimals ok)';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Add Save/Load buttons to toolbar
 const saveLoadHTML = `
     <div class="save-load-controls">
@@ -160,18 +396,12 @@ const saveLoadHTML = `
 `;
 
 // Find toolbar and insert before zoom controls
-const toolbar = document.querySelector('.toolbar') || document.body;
-const zoomControls = document.querySelector('.zoom-controls');
-if (zoomControls && zoomControls.parentNode) {
-    zoomControls.parentNode.insertBefore(
-        document.createElement('div'),
-        zoomControls
-    );
-    const lastInserted = document.querySelector('.zoom-controls').previousElementSibling;
-    lastInserted.innerHTML = saveLoadHTML;
-} else {
-    document.body.insertAdjacentHTML('beforeend', saveLoadHTML);
-}
+
+
+// Insert save/load buttons into toolbar
+const saveLoadContainer = document.createElement('div');
+saveLoadContainer.innerHTML = saveLoadHTML;
+document.body.appendChild(saveLoadContainer);
 
 // Add CSS for save/load buttons
 const saveLoadStyle = document.createElement('style');
@@ -685,21 +915,39 @@ function calculateAngles(shape) {
     };
 }
 
+
 function drawAngles(shape) {
     const angles = calculateAngles(shape);
     if (!angles) return;
 
+    // Reset to screen space first
+    shapesCtx.setTransform(1, 0, 0, 1, 0, 0);
+    
     const ctx = shapesCtx;
     ctx.fillStyle = shape.color;
-    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+    // Scale font size with zoom - make it bigger
+    const fontSize = Math.max(16, 28 * scale);
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     shape.points.forEach((point, i) => {
         const angle = i === 0 ? angles.A : i === 1 ? angles.B : angles.C;
-        const offset = 0.75 * GRID_SIZE; // world units so it moves with zoom
-        const ox = point.x + offset;
-        const oy = point.y - offset;
+        
+        // Convert point to screen space
+        const screenPoint = worldToScreen(point.x, point.y);
+        const offsetDistance = 40 * scale; // Scale offset distance too
+        
+        // Calculate offset direction (away from center)
+        const center = getShapeCenter(shape);
+        const centerScreen = worldToScreen(center.x, center.y);
+        const dx = screenPoint.x - centerScreen.x;
+        const dy = screenPoint.y - centerScreen.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        const ox = screenPoint.x + (dx / dist) * offsetDistance;
+        const oy = screenPoint.y + (dy / dist) * offsetDistance;
+        
         ctx.fillText(angle + '°', ox, oy);
     });
 }
@@ -940,7 +1188,6 @@ shapesCanvas.addEventListener('mousemove', (e) => {
             point.y += dy;
         });
 
-        // recompute dragOffset relative to moved shape
         dragOffset.x = pos.x - selectedShape.points[0].x;
         dragOffset.y = pos.y - selectedShape.points[0].y;
 
@@ -1318,8 +1565,6 @@ shapesCanvas.addEventListener('mousemove', (e) => {
     }
 });
 
-// ...existing code...
-// zoom handling: wheel to zoom centered at mouse
 shapesCanvas.addEventListener('wheel', (e) => {
     const rect = shapesCanvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
@@ -1346,4 +1591,3 @@ window.addEventListener('resize', resizeCanvases);
 
 resizeCanvases();
 drawGrid();
-// ...existing code...
