@@ -132,109 +132,37 @@ document.body.appendChild(fileInput);
 
 
 
+const toolbar = document.querySelector('.toolbar') || document.body;
+
 btn.addEventListener('click', () => {
     hidden = !hidden;
-
     toolbar.classList.toggle('collapsed', hidden);
-
     icon.style.transform = hidden ? 'rotate(180deg)' : 'rotate(0deg)';
 });
 
-const angleInputHTML = `
-    <div class="angle-input-section">
-        <label>Create by Angles:</label>
-        <input type="text" id="angleInput" placeholder="e.g., 60,60,60 for equilateral" title="Enter angles separated by commas">
-        <input type="number" id="sideLength" placeholder="Side length" value="100" min="10" step="10">
-        <button class="btn" id="createAngleBtn">Create</button>
-    </div>
-`;
-
-// Insert into toolbar
-const toolbar = document.querySelector('.toolbar') || document.body;
-const coordSection = document.querySelector('[data-shape]')?.parentElement || document.body;
-if (coordSection) {
-    coordSection.insertAdjacentHTML('afterend', angleInputHTML);
-} else {
-    document.body.insertAdjacentHTML('beforeend', angleInputHTML);
-}
-
-// Add CSS for angle input
-const angleInputStyle = document.createElement('style');
-angleInputStyle.textContent = `
-    .angle-input-section {
-        display: flex;
-        gap: 8px;
-        padding: 8px;
-        background: #f1f5f9;
-        border-radius: 6px;
-        flex-wrap: wrap;
-        align-items: center;
-    }
-
-    .angle-input-section label {
-        font-weight: 600;
-        font-size: 14px;
-        color: #1e293b;
-    }
-
-    .angle-input-section input {
-        padding: 6px 8px;
-        border: 1px solid #cbd5e1;
-        border-radius: 4px;
-        font-size: 14px;
-    }
-
-    .angle-input-section input[type="text"] {
-        flex: 1;
-        min-width: 150px;
-    }
-
-    .angle-input-section input[type="number"] {
-        width: 100px;
-    }
-
-    .angle-input-section .btn {
-        padding: 6px 12px;
-        white-space: nowrap;
-    }
-`;
-document.head.appendChild(angleInputStyle);
-
-// Function to create triangle from angles
 function createTriangleFromAngles(angles, sideLength) {
     if (angles.length !== 3) {
         alert('Triangle requires exactly 3 angles');
         return null;
     }
-
-    // Convert to radians
     const a = angles[0] * Math.PI / 180;
     const b = angles[1] * Math.PI / 180;
     const c = angles[2] * Math.PI / 180;
-
-    // Using law of sines to calculate other sides
     const sideA = sideLength;
     const sideB = sideA * Math.sin(b) / Math.sin(a);
     const sideC = sideA * Math.sin(c) / Math.sin(a);
-
-    // Create triangle points
     const p1 = { x: 0, y: 0 };
     const p2 = { x: sideA, y: 0 };
-    
-    // Third point using angle at p1
     const p3 = {
         x: sideC * Math.cos(a),
         y: sideC * Math.sin(a)
     };
-
-    // Center the triangle
     const minX = Math.min(p1.x, p2.x, p3.x);
     const minY = Math.min(p1.y, p2.y, p3.y);
     const maxX = Math.max(p1.x, p2.x, p3.x);
     const maxY = Math.max(p1.y, p2.y, p3.y);
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-
     return [
         { x: (p1.x - centerX) * GRID_SIZE, y: (p1.y - centerY) * GRID_SIZE },
         { x: (p2.x - centerX) * GRID_SIZE, y: (p2.y - centerY) * GRID_SIZE },
@@ -242,7 +170,6 @@ function createTriangleFromAngles(angles, sideLength) {
     ];
 }
 
-// Function to create square from angles and side
 function createSquareFromSide(sideLength) {
     const half = sideLength / 2;
     return [
@@ -253,27 +180,21 @@ function createSquareFromSide(sideLength) {
     ];
 }
 
-// Angle button handler
 document.getElementById('createAngleBtn').addEventListener('click', () => {
     const angleInput = document.getElementById('angleInput').value.trim();
     const sideLength = parseFloat(document.getElementById('sideLength').value) || 100;
-
     if (!angleInput) {
         alert('Enter angles');
         return;
     }
-
     const angleStrs = angleInput.split(',');
     const angles = angleStrs.map(a => parseFloat(a.trim())).filter(a => !isNaN(a));
-
     if (angles.length === 3) {
-        // Triangle from angles
         const sum = angles.reduce((a, b) => a + b, 0);
         if (Math.abs(sum - 180) > 0.1) {
             alert('Triangle angles must sum to 180°');
             return;
         }
-
         const points = createTriangleFromAngles(angles, sideLength);
         if (points) {
             createShape('triangle', points);
@@ -283,7 +204,6 @@ document.getElementById('createAngleBtn').addEventListener('click', () => {
             document.getElementById('angleInput').value = '';
         }
     } else if (angles.length === 1) {
-        // Square (all angles are 90)
         const points = createSquareFromSide(angles[0]);
         createShape('square', points);
         checkCollisions();
@@ -1148,84 +1068,6 @@ shapesCanvas.addEventListener('mouseleave', () => {
 shapesCanvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
 });
-shapesCanvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-});
-shapesCanvas.addEventListener('mousemove', (e) => {
-    const rect = shapesCanvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-    const pos = screenToWorld(screenX, screenY);
-    const snappedPos = getSnappedPos(pos);
-
-    if (isDragging && selectedShape && dragPointIndex >= 0) {
-        // snap point in world coordinates
-        selectedShape.points[dragPointIndex] = snappedPos;
-        checkCollisions();
-        updateInfoPanel();
-        drawAllShapes();
-        return;
-    }
-
-    if (isDraggingShape && selectedShape) {
-        // move whole shape: compute new base (world) and snap that base
-        const newBaseWorldX = pos.x - dragOffset.x;
-        const newBaseWorldY = pos.y - dragOffset.y;
-        const snappedBaseX = snapToGrid(newBaseWorldX);
-        const snappedBaseY = snapToGrid(newBaseWorldY);
-
-        const originalBase = selectedShape.points[0];
-        const dx = snappedBaseX - originalBase.x;
-        const dy = snappedBaseY - originalBase.y;
-
-        selectedShape.points.forEach(point => {
-            point.x += dx;
-            point.y += dy;
-        });
-
-        dragOffset.x = pos.x - selectedShape.points[0].x;
-        dragOffset.y = pos.y - selectedShape.points[0].y;
-
-        checkCollisions();
-        updateInfoPanel();
-        drawAllShapes();
-        return;
-    }
-
-    const pointFound = findPointAtPosition(pos);
-    if (pointFound) {
-        hoveredPoint = pointFound.point;
-        // show coordinates in grid units with one decimal
-        tooltip.textContent = `(${(pointFound.point.x / GRID_SIZE).toFixed(1)}, ${(pointFound.point.y / GRID_SIZE).toFixed(1)})`;
-        tooltip.classList.add('visible');
-        tooltip.style.left = (screenX + 15) + 'px';
-        tooltip.style.top = (screenY + 15) + 'px';
-        shapesCanvas.style.cursor = 'pointer';
-        drawAllShapes();
-    } else {
-        if (hoveredPoint) {
-            hoveredPoint = null;
-            tooltip.classList.remove('visible');
-            shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
-            drawAllShapes();
-        } else if (!tooltip.classList.contains('visible')) {
-            shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
-        }
-    }
-});
-
-shapesCanvas.addEventListener('mouseup', () => {
-    isDragging = false;
-    dragPointIndex = -1;
-    isDraggingShape = false;
-});
-
-shapesCanvas.addEventListener('mouseleave', () => {
-    tooltip.classList.remove('visible');
-    isDragging = false;
-    dragPointIndex = -1;
-    isDraggingShape = false;
-});
 
 document.querySelectorAll('[data-shape]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1337,7 +1179,6 @@ showAxesToggle.addEventListener('change', (e) => {
     drawAllShapes();
 });
 
-// keyboard shortcuts
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedShape) {
@@ -1566,7 +1407,6 @@ shapesCanvas.addEventListener('wheel', (e) => {
     const screenY = e.clientY - rect.top;
     const worldBefore = screenToWorld(screenX, screenY);
 
-    // zoom factor per wheel event (smooth)
     const delta = -e.deltaY;
     const zoomFactor = delta > 0 ? 1.1 : 0.9;
 
