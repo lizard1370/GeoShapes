@@ -1,7 +1,6 @@
-// ...existing code...
 const GRID_SIZE = 20;
 const SNAP_THRESHOLD = 10;
-const POINT_RADIUS = 6; // screen pixels for handles
+const POINT_RADIUS = 6;
 
 const gridCanvas = document.getElementById('gridCanvas');
 const gridCtx = gridCanvas.getContext('2d');
@@ -39,11 +38,12 @@ let isDraggingShape = false;
 let dragOffset = { x: 0, y: 0 };
 let hoveredPoint = null;
 let showAxesNumbers = false;
-
-// world transform state
 let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
+let lastDragPos = { x: 0, y: 0 };
+let isDragQueued = false;
+let isDecimalMode = false;
 
 function screenToWorld(screenX, screenY) {
     return {
@@ -70,7 +70,6 @@ function resizeCanvases() {
     gridCanvas.height = window.innerHeight;
     shapesCanvas.width = window.innerWidth;
     shapesCanvas.height = window.innerHeight;
-    // keep view centered on resize roughly (optional)
     drawGrid();
     drawAllShapes();
 }
@@ -116,7 +115,6 @@ function loadFromJSON(file) {
     reader.readAsText(file);
 }
 
-// Add hidden file input for loading
 const fileInput = document.createElement('input');
 fileInput.type = 'file';
 fileInput.accept = '.json';
@@ -128,9 +126,6 @@ fileInput.addEventListener('change', (e) => {
     }
 });
 document.body.appendChild(fileInput);
-
-
-
 
 const toolbar = document.querySelector('.toolbar') || document.body;
 
@@ -215,9 +210,6 @@ document.getElementById('createAngleBtn').addEventListener('click', () => {
     }
 });
 
-// ENABLE DECIMAL INPUT WITH SHIFT KEY
-let isDecimalMode = false;
-
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Shift') {
         isDecimalMode = true;
@@ -249,18 +241,20 @@ document.addEventListener('keyup', (e) => {
     }
 });
 
-// Override getSnappedPos when in decimal mode
-const originalGetSnappedPos = getSnappedPos;
+const originalGetSnappedPos = function(pos) {
+    return {
+        x: snapToGrid(pos.x),
+        y: snapToGrid(pos.y)
+    };
+};
+
 window.getSnappedPos = function(pos) {
     if (isDecimalMode) {
-        // Don't snap, keep decimal precision
         return pos;
     }
     return originalGetSnappedPos(pos);
 };
 
-// Update coordinate input to accept decimals
-const originalCoordInput = coordInput.value;
 coordInput.placeholder = 'x1,y1 x2,y2 x3,y3 x4,y4 (decimals ok)';
 
 
@@ -277,32 +271,21 @@ coordInput.placeholder = 'x1,y1 x2,y2 x3,y3 x4,y4 (decimals ok)';
 
 
 
-// Add Save/Load buttons to toolbar
 const saveLoadHTML = `
     <div class="save-load-controls">
         <button class="btn" id="saveBtn" title="Save (Ctrl+S)">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="512" height="512" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <!-- outer shape -->
             <path d="M4 4h12l4 4v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
-            
-            <!-- top slot -->
             <path d="M8 4v5h8V4"/>
-            
-            <!-- label / disk window -->
             <rect x="8" y="13" width="8" height="5" rx="1"/>
             </svg>
         </button>
         <button class="btn" id="loadBtn" title="Load">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Tray -->
             <path d="M3 15V18C3 19.1 3.9 20 5 20H19C20.1 20 21 19.1 21 18V15"
                     stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            
-            <!-- Arrow shaft -->
             <path d="M12 3V14"
                     stroke="black" stroke-width="2" stroke-linecap="round"/>
-            
-            <!-- Arrow head -->
             <path d="M8 10L12 14L16 10"
                     stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -310,15 +293,10 @@ const saveLoadHTML = `
     </div>
 `;
 
-// Find toolbar and insert before zoom controls
-
-
-// Insert save/load buttons into toolbar
 const saveLoadContainer = document.createElement('div');
 saveLoadContainer.innerHTML = saveLoadHTML;
 document.body.appendChild(saveLoadContainer);
 
-// Add CSS for save/load buttons
 const saveLoadStyle = document.createElement('style');
 saveLoadStyle.textContent = `
     .save-load-controls {
@@ -342,11 +320,9 @@ saveLoadStyle.textContent = `
 `;
 document.head.appendChild(saveLoadStyle);
 
-// Button handlers
 document.getElementById('saveBtn').addEventListener('click', saveToJSON);
 document.getElementById('loadBtn').addEventListener('click', () => fileInput.click());
 
-// Keyboard shortcut: Ctrl+S to save
 document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -491,20 +467,17 @@ shapesCanvas.addEventListener('touchcancel', (e) => {
 }, { passive: true });
 
 function drawGrid() {
-    // draw grid in world coordinates using transform
     gridCtx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
     gridCtx.clearRect(-offsetX/scale, -offsetY/scale, gridCanvas.width/scale, gridCanvas.height/scale);
 
     gridCtx.strokeStyle = '#e2e8f0';
     gridCtx.lineWidth = 1 / Math.max(scale, 0.0001);
 
-    // compute visible world bounds
     const worldXMin = -offsetX / scale;
     const worldYMin = -offsetY / scale;
     const worldXMax = (gridCanvas.width - offsetX) / scale;
     const worldYMax = (gridCanvas.height - offsetY) / scale;
 
-    // vertical lines
     let startX = Math.floor(worldXMin / GRID_SIZE) * GRID_SIZE;
     for (let x = startX; x <= worldXMax; x += GRID_SIZE) {
         gridCtx.beginPath();
@@ -513,7 +486,6 @@ function drawGrid() {
         gridCtx.stroke();
     }
 
-    // horizontal lines
     let startY = Math.floor(worldYMin / GRID_SIZE) * GRID_SIZE;
     for (let y = startY; y <= worldYMax; y += GRID_SIZE) {
         gridCtx.beginPath();
@@ -522,7 +494,6 @@ function drawGrid() {
         gridCtx.stroke();
     }
 
-    // major lines
     gridCtx.strokeStyle = '#cbd5e1';
     gridCtx.lineWidth = 2 / Math.max(scale, 0.0001);
 
@@ -541,9 +512,8 @@ function drawGrid() {
         gridCtx.stroke();
     }
 
-    // draw axis numbers in screen-space so they are readable
     if (showAxesNumbers) {
-        gridCtx.setTransform(1, 0, 0, 1, 0, 0); // reset
+        gridCtx.setTransform(1, 0, 0, 1, 0, 0);
         gridCtx.fillStyle = '#64748b';
         gridCtx.font = '11px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
         gridCtx.textAlign = 'center';
@@ -567,7 +537,6 @@ function drawGrid() {
             }
         }
     } else {
-        // reset transform before returning so other code isn't surprised
         gridCtx.setTransform(1, 0, 0, 1, 0, 0);
     }
 }
@@ -617,7 +586,6 @@ function drawShape(shape) {
     const isSelected = shape === selectedShape;
     const isCollision = shape.collision;
 
-    // draw filled shape in world coordinates (transform applied by caller)
     ctx.beginPath();
     if (shape.points.length > 0) {
         ctx.moveTo(shape.points[0].x, shape.points[0].y);
@@ -648,27 +616,22 @@ function drawShape(shape) {
     ctx.fill();
     ctx.stroke();
 
-    // draw angle labels (in world space so they move with zoom)
     if (isSelected && shape.type === 'triangle') {
         drawAngles(shape);
     }
 }
 
 function drawAllShapes() {
-    // clear shapes canvas fully
     shapesCtx.setTransform(1, 0, 0, 1, 0, 0);
     shapesCtx.clearRect(0, 0, shapesCanvas.width, shapesCanvas.height);
 
-    // apply world transform for drawing shapes
     shapesCtx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
     shapes.forEach(shape => drawShape(shape));
 
-    // draw preview shape (in world coords)
     if (currentShapePoints.length > 0) {
         drawPreviewShape();
     }
 
-    // draw point handles in screen space so they stay constant-size
     shapesCtx.setTransform(1, 0, 0, 1, 0, 0);
     shapes.forEach(shape => {
         shape.points.forEach((point) => {
@@ -684,7 +647,6 @@ function drawAllShapes() {
         });
     });
 
-    // preview points in screen space
     if (currentShapePoints.length > 0) {
         currentShapePoints.forEach(point => {
             const s = worldToScreen(point.x, point.y);
@@ -697,7 +659,6 @@ function drawAllShapes() {
 }
 
 function drawPreviewShape() {
-    // draw preview using world transform
     shapesCtx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
     const ctx = shapesCtx;
     ctx.beginPath();
@@ -713,12 +674,10 @@ function drawPreviewShape() {
 }
 
 function findPointAtPosition(pos) {
-    // pos is in world coords
     for (let shape of shapes) {
         for (let i = 0; i < shape.points.length; i++) {
             const point = shape.points[i];
             const dist = Math.sqrt(Math.pow(pos.x - point.x, 2) + Math.pow(pos.y - point.y, 2));
-            // use threshold in world units derived from POINT_RADIUS screen pixels
             const worldRadius = POINT_RADIUS / Math.max(scale, 0.0001);
             if (dist < worldRadius * 1.8) {
                 return { shape, index: i, point };
@@ -835,12 +794,10 @@ function drawAngles(shape) {
     const angles = calculateAngles(shape);
     if (!angles) return;
 
-    // Reset to screen space first
     shapesCtx.setTransform(1, 0, 0, 1, 0, 0);
     
     const ctx = shapesCtx;
     ctx.fillStyle = shape.color;
-    // Scale font size with zoom - make it bigger
     const fontSize = Math.max(16, 28 * scale);
     ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif`;
     ctx.textAlign = 'center';
@@ -849,11 +806,9 @@ function drawAngles(shape) {
     shape.points.forEach((point, i) => {
         const angle = i === 0 ? angles.A : i === 1 ? angles.B : angles.C;
         
-        // Convert point to screen space
         const screenPoint = worldToScreen(point.x, point.y);
-        const offsetDistance = 40 * scale; // Scale offset distance too
+        const offsetDistance = 40 * scale;
         
-        // Calculate offset direction (away from center)
         const center = getShapeCenter(shape);
         const centerScreen = worldToScreen(center.x, center.y);
         const dx = screenPoint.x - centerScreen.x;
@@ -918,7 +873,6 @@ shapesCanvas.addEventListener('mousedown', (e) => {
     const pos = getMousePos(e);
     const snappedPos = getSnappedPos(pos);
 
-    // Right-click pan
     if (e.button === 2) {
         isPanning = true;
         panStartX = e.clientX;
@@ -1001,7 +955,6 @@ shapesCanvas.addEventListener('mousedown', (e) => {
 });
 
 shapesCanvas.addEventListener('mousemove', (e) => {
-    // Pan with right-click
     if (isPanning) {
         const deltaX = e.clientX - panStartX;
         const deltaY = e.clientY - panStartY;
@@ -1156,7 +1109,6 @@ createBtn.addEventListener('click', () => {
         } else if (points.length === 3) {
             type = 'triangle';
         } else if (points.length === 4) {
-            // if the 4 points form an axis-aligned square, mark as square
             const dx1 = Math.abs(points[0].x - points[1].x);
             const dy1 = Math.abs(points[0].y - points[1].y);
             const isAxisAlignedSquare = (dx1 === Math.abs(points[1].x - points[2].x) && dy1 === Math.abs(points[1].y - points[2].y));
@@ -1204,9 +1156,7 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
-// ...existing code...
 
-// Add zoom controls UI
 const zoomControlsHTML = `
     <div class="zoom-controls">
         <button class="btn" id="zoomInBtn" title="Zoom In (+)">
@@ -1223,7 +1173,6 @@ const zoomControlsHTML = `
 
 document.body.insertAdjacentHTML('beforeend', zoomControlsHTML);
 
-// Add CSS for zoom controls
 const zoomControlsStyle = document.createElement('style');
 zoomControlsStyle.textContent = `
     .zoom-controls {
@@ -1248,12 +1197,10 @@ zoomControlsStyle.textContent = `
 `;
 document.head.appendChild(zoomControlsStyle);
 
-// Zoom function
 function setZoom(newScale) {
     const clampedScale = Math.min(5, Math.max(0.2, newScale));
     scale = clampedScale;
     
-    // center view on canvas center
     const centerScreenX = shapesCanvas.width / 2;
     const centerScreenY = shapesCanvas.height / 2;
     offsetX = centerScreenX;
@@ -1263,7 +1210,6 @@ function setZoom(newScale) {
     drawAllShapes();
 }
 
-// Zoom button handlers
 document.getElementById('zoomInBtn').addEventListener('click', () => {
     setZoom(scale * 1.2);
 });
@@ -1279,10 +1225,6 @@ document.getElementById('resetViewBtn').addEventListener('click', () => {
     drawGrid();
     drawAllShapes();
 });
-
-// Smooth drag: use requestAnimationFrame for smoother movement
-let lastDragPos = { x: 0, y: 0 };
-let isDragQueued = false;
 
 function processDrag() {
     isDragQueued = false;
@@ -1316,90 +1258,6 @@ function processDrag() {
         }
     }
 }
-createBtn.addEventListener('click', () => {
-    const input = coordInput.value.trim();
-    if (!input) return;
-
-    const parts = input.split(/\s+/);
-    const points = [];
-
-    for (let part of parts) {
-        const coords = part.split(',');
-        if (coords.length === 2) {
-            const x = parseFloat(coords[0]) * GRID_SIZE;
-            const y = parseFloat(coords[1]) * GRID_SIZE;
-            if (!isNaN(x) && !isNaN(y)) {
-                points.push({ x, y });
-            }
-        }
-    }
-
-    // Allow creating with as few as 2 points
-    if (points.length >= 2) {
-        let type = 'polygon';
-        
-        if (points.length === 2) {
-            type = 'circle';
-        } else if (points.length === 3) {
-            type = 'triangle';
-        } else if (points.length === 4) {
-            // check if it's an axis-aligned square
-            const dx1 = Math.abs(points[0].x - points[1].x);
-            const dy1 = Math.abs(points[0].y - points[1].y);
-            const dx2 = Math.abs(points[1].x - points[2].x);
-            const dy2 = Math.abs(points[1].y - points[2].y);
-            const isAxisAlignedSquare = (dx1 === dx2 && dy1 === dy2);
-            type = isAxisAlignedSquare ? 'square' : 'polygon';
-        } else {
-            type = 'polygon';
-        }
-
-        createShape(type, points);
-        checkCollisions();
-        updateInfoPanel();
-        drawAllShapes();
-        coordInput.value = '';
-    } else if (points.length === 1) {
-        // show error or just ignore
-        console.warn('Need at least 2 coordinate pairs');
-    }
-});
-shapesCanvas.addEventListener('mousemove', (e) => {
-    const rect = shapesCanvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-    const pos = screenToWorld(screenX, screenY);
-
-    lastDragPos = pos;
-
-    if ((isDragging && selectedShape && dragPointIndex >= 0) || (isDraggingShape && selectedShape)) {
-        if (!isDragQueued) {
-            isDragQueued = true;
-            requestAnimationFrame(processDrag);
-        }
-        return;
-    }
-
-    const pointFound = findPointAtPosition(pos);
-    if (pointFound) {
-        hoveredPoint = pointFound.point;
-        tooltip.textContent = `(${(pointFound.point.x / GRID_SIZE).toFixed(1)}, ${(pointFound.point.y / GRID_SIZE).toFixed(1)})`;
-        tooltip.classList.add('visible');
-        tooltip.style.left = (screenX + 15) + 'px';
-        tooltip.style.top = (screenY + 15) + 'px';
-        shapesCanvas.style.cursor = 'pointer';
-        drawAllShapes();
-    } else {
-        if (hoveredPoint) {
-            hoveredPoint = null;
-            tooltip.classList.remove('visible');
-            shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
-            drawAllShapes();
-        } else if (!tooltip.classList.contains('visible')) {
-            shapesCanvas.style.cursor = currentShapeType ? 'crosshair' : 'default';
-        }
-    }
-});
 
 shapesCanvas.addEventListener('wheel', (e) => {
     const rect = shapesCanvas.getBoundingClientRect();
@@ -1413,7 +1271,6 @@ shapesCanvas.addEventListener('wheel', (e) => {
     const newScale = Math.min(5, Math.max(0.2, scale * zoomFactor));
     scale = newScale;
 
-    // keep the worldBefore point under the mouse after zoom
     offsetX = screenX - worldBefore.x * scale;
     offsetY = screenY - worldBefore.y * scale;
 
